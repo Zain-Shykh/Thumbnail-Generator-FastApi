@@ -1,0 +1,15 @@
+# ==========================================
+# Python & Environment Exclusions
+# ==========================================
+
+# Ignores Python bytecode cache folders anywhere in the project
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignores your local virtual environment folder
+myenv/
+
+# Ignores all secret environment variable files
+.env
