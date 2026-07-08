@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -15,9 +17,10 @@ class ThumbnailResponse(BaseModel):
     status: str
     imagekit_url: str | None = None
     variants: dict | None = None
+    error_message: Optional[str] = None
 
 class JobResponse(BaseModel):
-    id: int
+    id: str
     prompt: str
     num_thumbnails: int
     headshot_url: str

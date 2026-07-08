@@ -1,3 +1,4 @@
+import json
 import os
 import asyncio
 import logging
@@ -74,4 +75,76 @@ async def get_job(job_id: str, session: Session = Depends(get_session)):
         headshot_url=job.headshot_url,
         status=job.status,
         thumbnails=thumb_responses,
+    )
+
+
+def _serialize_thumbnail(t: Thumbnail) -> dict:
+    """Single source of truth for the shape sent to the frontend,
+    kept consistent with ThumbnailResponse (`id`, not `thumbnail_id`)."""
+    return {
+        "id": t.id,
+        "style_name": t.style_name,
+        "status": t.status,
+        "imagekit_url": t.imagekit_url,
+        "variants": get_variants(t.imagekit_url) if t.imagekit_url else None,
+        "error_message": t.error_message,
+    }
+
+
+@router.get("/jobs/{job_id}/stream")
+async def stream_job(job_id: str):
+    async def event_generator():
+        from database import engine
+        import json
+        sent_thumbnails = set()
+
+        while True:
+            with Session(engine) as session:
+                job = session.get(Job, job_id)
+                if not job:
+                    yield f"event: error\ndata: {json.dumps({'error': 'Job not found'})}\n\n"
+                    return
+                    
+                thumbnails = session.exec(select(Thumbnail).where(Thumbnail.job_id == job_id)).all()
+                
+                for t in thumbnails:
+                    if t.id in sent_thumbnails:
+                        continue
+                        
+                    if t.status == "uploaded":
+                        data = json.dumps(_serialize_thumbnail(t))
+                        yield f"event: thumbnail_ready\ndata: {data}\n\n"
+                        sent_thumbnails.add(t.id)
+                        
+                    elif t.status in ["failed", "error"]:
+                        payload = _serialize_thumbnail(t)
+                        payload["error_message"] = t.error_message or "API Quota Limit Exhausted (429)"
+                        data = json.dumps(payload)
+                        yield f"event: thumbnail_failed\ndata: {data}\n\n"
+                        sent_thumbnails.add(t.id)
+
+                # Check if everything in this check iteration is terminal
+                all_done = all(t.status in ["uploaded", "failed", "error"] for t in thumbnails)
+                if all_done and len(sent_thumbnails) == len(thumbnails):
+                    # Include the full thumbnail list here too, so the frontend
+                    # can reconcile/repair any card that (for whatever reason)
+                    # never got an individual ready/failed event.
+                    data = json.dumps({
+                        "job_id": job_id,
+                        "status": job.status,
+                        "thumbnails": [_serialize_thumbnail(t) for t in thumbnails],
+                    })
+                    yield f"event: job_completed\ndata: {data}\n\n"
+                    return
+
+            await asyncio.sleep(1.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        },
     )

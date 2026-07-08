@@ -8,13 +8,12 @@ imagekit = ImageKit(
 def upload_file(file_bytes:bytes, file_name:str, folder:str, content_type:str = "image/png") -> str:
     """ upload a file to imagekit and return the cdn url of the uploaded file """
     result = imagekit.files.upload(
-        file=(file_bytes, file_name, content_type),
+        file=file_bytes, 
         file_name=file_name,
         folder=folder,
         is_private_file=False,
         use_unique_file_name=True,
     )
-
     return result.url
 
 def get_variants(base_url: str) -> dict:

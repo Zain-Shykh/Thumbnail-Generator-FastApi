@@ -1,0 +1,9 @@
+Backend Server:
+fastapi dev main.py
+
+runs at port 8000 
+proxy configured at 8000
+
+Frontend Server:
+npm run dev
+runs at port 5173
